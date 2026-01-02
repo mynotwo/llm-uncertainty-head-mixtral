@@ -1,0 +1,78 @@
+hydra:
+  run:
+    dir: ${output_dir}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+model:
+  pretrained_model_name_or_path: mistralai/Mixtral-8x7B-Instruct-v0.1
+  device_map: cuda
+  trust_remote_code: true
+  torch_dtype: torch.float16
+
+ue_layer:
+  path: ''
+  pos_weight: 3
+  output_attention: false
+  head_cfg:
+    head_type: claim
+    feature_extractor:
+      # Token mean + layer mean aggregation => raw dim = num_experts
+      - name: luh.feature_extractors.mixtral_router
+        feature_source: mixtral_router
+        router_output: logits
+        token_agg: mean
+        layer_agg: mean
+        dim_align: projection
+      # Token mean + layer concat aggregation => raw dim = num_layers * num_experts
+      - name: luh.feature_extractors.mixtral_router
+        feature_source: mixtral_router
+        router_output: logits
+        token_agg: mean
+        layer_agg: concat
+        dim_align: projection
+      # Token concat + layer mean aggregation => raw dim = max_seq_len_for_concat_tokens * num_experts
+      - name: luh.feature_extractors.mixtral_router
+        feature_source: mixtral_router
+        router_output: logits
+        token_agg: concat
+        layer_agg: mean
+        max_seq_len_for_concat_tokens: 128
+        dim_align: projection
+      # Token concat + layer concat aggregation => raw dim = num_layers * max_seq_len_for_concat_tokens * num_experts
+      - name: luh.feature_extractors.mixtral_router
+        feature_source: mixtral_router
+        router_output: logits
+        token_agg: concat
+        layer_agg: concat
+        max_seq_len_for_concat_tokens: 128
+        dim_align: projection
+    uncertainty_head:
+      head_dim: 256
+      n_layers: 2
+      n_heads: 8
+      dropout: 0.1
+
+# Example dataset and training hyperparameters for router-based extractor experiments
+# Adjust dataset path and sizes to your setup.
+dataset:
+  path: hf:llm-uncertainty-head/train_akimbio_mistral
+  num_instances: 0
+  test_size: 0.0
+  validation: test
+
+training_arguments:
+  num_train_epochs: 3
+  learning_rate: 5.0e-5
+  warmup_ratio: 0.05
+  weight_decay: 0.01
+  gradient_accumulation_steps: 1
+  per_device_train_batch_size: 4
+  max_grad_norm: 1.0
+
+do_train: true
+do_eval: true
+do_hyperopt: false
+do_save_checkpoints: true
+do_save_final_model: true
+report_to: none
+output_dir: ./workdir/train_router
+#do_predict: false
