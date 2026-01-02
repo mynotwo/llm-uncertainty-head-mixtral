@@ -47,6 +47,10 @@ class UncertaintyHeadBase(nn.Module):
     def output_attentions(self):
         return self.feature_extractor.output_attention()
 
+    @property
+    def requires_router_outputs(self):
+        return self.feature_extractor.requires_router_outputs()
+
     @classmethod
     def from_pretrained(
         cls,
@@ -74,7 +78,13 @@ class UncertaintyHeadBase(nn.Module):
 
         cfg = OmegaConf.load(config_path)
         weights = torch.load(weights_path, weights_only=True)
-        feature_extractor = load_feature_extractor(cfg.feature_extractor, base_model)
+        target_head_dim = None
+        if cfg.uncertainty_head is not None and "head_dim" in cfg.uncertainty_head:
+            target_head_dim = cfg.uncertainty_head.head_dim
+
+        feature_extractor = load_feature_extractor(
+            cfg.feature_extractor, base_model, target_head_dim=target_head_dim
+        )
         ue_head_cfg = cfg.uncertainty_head if cfg.uncertainty_head is not None else dict()
         uq_head = cls(feature_extractor, cfg=cfg, **ue_head_cfg)
         incompatible_keys = uq_head.load_state_dict(weights)
@@ -84,10 +94,6 @@ class UncertaintyHeadBase(nn.Module):
         ), f"LuqSequenceEstimator cannot be loaded. Missing keys: {incompatible_keys.missing_keys}; Unexpected keys: {incompatible_keys}."
 
         return uq_head
-
-    @property
-    def output_attentions(self):
-        return self.feature_extractor.output_attention()
 
     def save(self, output_dir: str):
         output_dir = Path(output_dir)

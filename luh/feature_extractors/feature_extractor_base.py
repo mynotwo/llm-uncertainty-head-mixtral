@@ -15,3 +15,7 @@ class FeatureExtractorBase(ABC):
 
     def output_attention(self):
         return False
+
+    def requires_router_outputs(self):
+        """Whether the base model forward should return router logits/probabilities."""
+        return False

@@ -57,8 +57,12 @@ class AutoUncertaintyHead:
     def from_config(cls, config, base_model):
         uq_head_type = cls.MODEL_MAPPING[config.head_type]
         
+        target_head_dim = None
+        if config.uncertainty_head is not None and "head_dim" in config.uncertainty_head:
+            target_head_dim = config.uncertainty_head.head_dim
+
         feature_extractor = load_feature_extractor(
-            config.feature_extractor, base_model
+            config.feature_extractor, base_model, target_head_dim=target_head_dim
         )
         ue_head_cfg = dict() if config.uncertainty_head is None else config.uncertainty_head
         uq_head = uq_head_type(

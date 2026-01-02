@@ -86,5 +86,5 @@ class FeatureExtractorBasicAttention(FeatureExtractorBase):
         return True
 
 
-def load_extractor(config, base_model):
+def load_extractor(config, base_model, **_kwargs):
     return FeatureExtractorBasicAttention(base_model, **config)

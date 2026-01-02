@@ -75,7 +75,7 @@ class FeatureExtractorTokenProbabilities(FeatureExtractorBase):
         return self.top_n
 
 
-def load_extractor(config, base_model):
+def load_extractor(config, base_model, **_kwargs):
     """
     Loads the token probability feature extractor with optional temperature scaling.
 

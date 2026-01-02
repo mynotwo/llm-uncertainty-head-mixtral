@@ -5,6 +5,7 @@ from .feature_extractor_base import FeatureExtractorBase
 
 import importlib
 import logging
+from omegaconf import OmegaConf
 
 log = logging.getLogger(__name__)
 
@@ -33,12 +34,14 @@ class FeatureExtractorCombined(FeatureExtractorBase):
         return any(fe.output_attention() for fe in self._feature_extractors)
 
 
-def load_extractor(config, base_model):
+def load_extractor(config, base_model, target_head_dim=None):
     feature_extractors = []
     for fe_cfg in config:
         fe_name = fe_cfg.name
         log.info(f"Loading feature extractor: {fe_name}")
         module = importlib.import_module(fe_name)
-        feature_extractors.append(module.load_extractor(fe_cfg, base_model))
+        if target_head_dim is not None and not hasattr(fe_cfg, "target_head_dim"):
+            fe_cfg = OmegaConf.merge(fe_cfg, {"target_head_dim": target_head_dim})
+        feature_extractors.append(module.load_extractor(fe_cfg, base_model, target_head_dim=target_head_dim))
 
     return FeatureExtractorCombined(*feature_extractors)
