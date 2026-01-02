@@ -33,6 +33,10 @@ class FeatureExtractorCombined(FeatureExtractorBase):
     def output_attention(self):
         return any(fe.output_attention() for fe in self._feature_extractors)
 
+    def requires_router_outputs(self):
+        """Whether any underlying extractor needs router tensors from the base model."""
+        return any(fe.requires_router_outputs() for fe in self._feature_extractors)
+
 
 def load_extractor(config, base_model, target_head_dim=None):
     feature_extractors = []
