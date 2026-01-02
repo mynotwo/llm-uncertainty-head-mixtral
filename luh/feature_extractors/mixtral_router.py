@@ -139,7 +139,7 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
             return llm_outputs["full_attention_mask"][:, 1:]
         return llm_inputs["attention_mask"][:, :-1]
 
-    def _collect_router_outputs(self, llm_outputs):
+    def _collect_router_outputs(self, llm_outputs, batch_size: int):
         router_key = "router_probs" if self._router_output == "probs" else "router_logits"
         router_values = getattr(llm_outputs, router_key, None)
         if router_values is None and isinstance(llm_outputs, dict):
@@ -162,13 +162,68 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
         else:
             raise TypeError(f"Unexpected router output type: {type(router_values)}")
 
+        def _normalize_tensor(tensor: torch.Tensor) -> torch.Tensor:
+            # Expected canonical shape: [batch, n_layers, seq_len, num_experts]
+            if tensor.dim() == 4:
+                if tensor.shape[0] == batch_size:
+                    return tensor
+                if tensor.shape[1] == batch_size:
+                    # Router tensors shaped [n_layers, batch, seq_len, num_experts]
+                    return tensor.permute(1, 0, 2, 3)
+                if tensor.shape[0] == len(self._layer_indices):
+                    # Treat the leading dimension as layers when batch is singleton.
+                    return tensor.unsqueeze(0).transpose(0, 1)
+
+                raise ValueError(
+                    "Unable to align router tensor with batch dimension: "
+                    f"got shape {tuple(tensor.shape)}, expected batch {batch_size}"
+                )
+
+            if tensor.dim() == 3:
+                # Most common case: [batch, seq_len, num_experts]
+                if tensor.shape[0] == batch_size:
+                    return tensor.unsqueeze(1)
+
+                # Some backends flatten batch and layer dims together: [batch * n_layers, seq_len, num_experts]
+                if tensor.shape[0] % batch_size == 0:
+                    possible_layers = tensor.shape[0] // batch_size
+                    return tensor.view(batch_size, possible_layers, tensor.shape[1], tensor.shape[2])
+
+                if tensor.shape[1] == batch_size:
+                    # Shape [n_layers, batch, num_experts] without explicit seq_len is unsupported.
+                    raise ValueError(
+                        "Received router tensor shaped [n_layers, batch, num_experts] without a sequence dimension; "
+                        "please enable router outputs with token positions."
+                    )
+
+                raise ValueError(
+                    "Unable to normalize router tensor with shape "
+                    f"{tuple(tensor.shape)} for batch size {batch_size}. "
+                    "Supported layouts: [batch, seq_len, num_experts], [batch * n_layers, seq_len, num_experts], "
+                    "or [batch, n_layers, seq_len, num_experts]."
+                )
+
+            raise ValueError(
+                "Router tensor must be 3D or 4D with expert scores; "
+                f"received shape {tuple(tensor.shape)}"
+            )
+
+        per_layer = [_normalize_tensor(tensor) for tensor in per_layer]
+
         selected_layers = [per_layer[i] for i in self._layer_indices]
 
         if self._router_output == "probs" and (logits_fallback or not hasattr(llm_outputs, "router_probs")):
             # Router probabilities are derived from logits when not returned explicitly.
             selected_layers = [F.softmax(layer, dim=-1) for layer in selected_layers]
 
-        return torch.stack(selected_layers, dim=1)  # [batch, n_layers, seq_len, num_experts]
+        stacked = torch.stack(selected_layers, dim=1)  # [batch, n_layers, seq_len, num_experts]
+        if stacked.shape[0] != batch_size:
+            raise ValueError(
+                "Router batch size does not match model inputs: "
+                f"router batch {stacked.shape[0]} vs inputs batch {batch_size}. "
+                "Check how router outputs are returned by the base model."
+            )
+        return stacked
 
     def _aggregate_tokens(self, router_tensor, mask):
         """
@@ -212,7 +267,8 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
             hidden_states = llm_outputs["hidden_states"][-1]
             return hidden_states[:, :-1, :]
 
-        router_tensor = self._collect_router_outputs(llm_outputs)
+        batch_size = llm_inputs["input_ids"].shape[0]
+        router_tensor = self._collect_router_outputs(llm_outputs, batch_size)
         # router_tensor: [batch, n_layers, seq_len, num_experts]
         token_mask = self._get_token_mask(llm_inputs, llm_outputs, router_tensor.shape[2])
         token_features = self._aggregate_tokens(router_tensor, token_mask)
