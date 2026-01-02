@@ -32,6 +32,10 @@ class UncertaintyHeadBase(nn.Module):
         pass
 
     def _get_attn_mask(self, llm_inputs, llm_outputs):
+        if hasattr(llm_outputs, "feature_attention_mask"):
+            return getattr(llm_outputs, "feature_attention_mask")
+        if isinstance(llm_outputs, dict) and "feature_attention_mask" in llm_outputs:
+            return llm_outputs["feature_attention_mask"]
         is_training = not hasattr(llm_outputs, "sequences")
         if is_training:
             return llm_inputs["attention_mask"][:, :-1]  # no new tokens introduced
