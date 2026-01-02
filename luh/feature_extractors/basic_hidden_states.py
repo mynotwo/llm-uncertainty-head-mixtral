@@ -35,6 +35,9 @@ class FeatureExtractorBasicHiddenStates(FeatureExtractorBase):
     def feature_dim(self):
         return self._feature_dim
 
+    def requires_hidden_states(self):
+        return True
+
 
 def load_extractor(config, base_model):
     return FeatureExtractorBasicHiddenStates(base_model, **config)

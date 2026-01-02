@@ -39,6 +39,7 @@ class CalculatorInferLuh(StatCalculator):
         self.uncertainty_head = uncertainty_head.to(device)
         self.uncertainty_head.eval()
         self.output_attentions = self.uncertainty_head.output_attentions
+        self.output_hidden_states = self.uncertainty_head.output_hidden_states
         self.predict_token_uncertainties = predict_token_uncertainties
 
     @staticmethod
@@ -87,7 +88,7 @@ class CalculatorInferLuh(StatCalculator):
             out = model(
                 **combined_batch,
                 output_attentions=self.output_attentions,
-                output_hidden_states=True,
+                output_hidden_states=self.output_hidden_states,
             )
             logits = out.logits.log_softmax(-1) # Why log_softmax?
             
@@ -261,7 +262,7 @@ class CalculatorInferLuh(StatCalculator):
             "max_new_tokens": max_new_tokens,
             "min_new_tokens": 2,
             "output_attentions": self.output_attentions,
-            "output_hidden_states": True,
+            "output_hidden_states": self.output_hidden_states,
             "num_return_sequences": 1,
             "do_sample": False,
         }
