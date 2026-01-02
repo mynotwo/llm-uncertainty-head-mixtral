@@ -36,6 +36,6 @@ class FeatureExtractorBasicHiddenStates(FeatureExtractorBase):
         return self._feature_dim
 
 
-def load_extractor(config, base_model):
+def load_extractor(config, base_model, **_kwargs):
     return FeatureExtractorBasicHiddenStates(base_model, **config)
 # TODO: fix problem with name paramter in the config

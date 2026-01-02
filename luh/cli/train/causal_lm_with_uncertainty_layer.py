@@ -29,6 +29,7 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
         self.ue_head = ue_head
         self._ue_pos_weight = ue_pos_weight
         self._output_attention = output_attention
+        self._requires_router_outputs = ue_head.requires_router_outputs
 
     def generate(self, *args, **kwargs):
         kwargs.update(
@@ -36,7 +37,8 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
                 "return_dict_in_generate": True,
                 "output_scores": True,
                 "output_hidden_states": True,
-                "output_attentions": self._output_attention
+                "output_attentions": self._output_attention,
+                "output_router_logits": self._requires_router_outputs,
             }
         )
 
@@ -62,6 +64,7 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
         )
         output_hidden_states = True
         output_attentions = self._output_attention
+        output_router_logits = self._requires_router_outputs
 
         outputs = self.orig_base_model(
             input_ids=input_ids,
@@ -69,6 +72,7 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=output_router_logits,
             return_dict=return_dict,
             **kwargs
         )
