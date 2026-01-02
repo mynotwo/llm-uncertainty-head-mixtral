@@ -107,11 +107,32 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
             self._output_dim = self._target_head_dim
 
     def _get_token_mask(self, llm_inputs, llm_outputs, seq_len: int):
+        """
+        Returns a 2D attention mask aligned with the router tensor length.
+
+        Router tensors returned from generation can cover only a suffix of the
+        full sequence (e.g., generated tokens), whereas ``attention_mask`` often
+        spans the entire prompt+generation window. We reshape to 2D, then
+        truncate or pad to the last ``seq_len`` tokens so the mask matches the
+        router tensor's sequence dimension.
+        """
+
         if hasattr(llm_outputs, "full_attention_mask"):
             mask = llm_outputs.full_attention_mask
         else:
             mask = llm_inputs["attention_mask"]
-        return mask[:, :seq_len]
+
+        # Flatten any broadcast dimensions (e.g., [batch, 1, seq_len]) to
+        # [batch, seq_len].
+        mask = mask.view(mask.shape[0], -1)
+
+        if mask.shape[1] >= seq_len:
+            return mask[:, -seq_len:]
+
+        # If the provided mask is shorter than the router outputs, pad zeros on
+        # the left to maintain alignment with the most recent tokens.
+        pad_len = seq_len - mask.shape[1]
+        return torch.nn.functional.pad(mask, (pad_len, 0))
 
     def _get_head_attention_mask(self, llm_inputs, llm_outputs):
         if hasattr(llm_outputs, "sequences"):
