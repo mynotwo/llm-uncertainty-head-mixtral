@@ -19,14 +19,14 @@ class FeatureExtractorTokenSimilaritiesAdjacentLayers(FeatureExtractorBase):
 
     def __call__(self, llm_inputs, llm_outputs):
         # batch_size x seq_len x layers x hidden_state
-        hidden_states = get_hidden_states(llm_outputs)
+        hidden_states = get_hidden_states(llm_outputs, self._layer_nums)
 
         # For loop on purpose: otherwise receiving CUDA OOM for Llama3/Gemma2. Should be quite fast anyway
         prev_embeddings = None
         sim_features = []
-        for layer in self._layer_nums:
+        for layer_idx, _ in enumerate(self._layer_nums):
             with torch.no_grad():
-                all_logits = self.lm_head(hidden_states[:, :, layer, :])  # batch_sz x seq_len x vocabulary
+                all_logits = self.lm_head(hidden_states[:, :, layer_idx, :])  # batch_sz x seq_len x vocabulary
             top_indices = torch.argsort(all_logits, dim=-1, descending=True)[:, :, :self.top_n]
             top_embeddings = self.get_embeddings(top_indices)  # batch_sz x seq_len x top_n x embeddings
             if prev_embeddings is not None:
@@ -36,6 +36,9 @@ class FeatureExtractorTokenSimilaritiesAdjacentLayers(FeatureExtractorBase):
         prob_features = torch.cat(sim_features, dim=-1)  # batch_sz x seq_len x ((layers - 1) * top_n)
 
         return prob_features
+
+    def requires_hidden_states(self):
+        return True
 
 
 def load_extractor(config, base_model, *args, **kwargs):

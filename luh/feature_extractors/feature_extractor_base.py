@@ -15,3 +15,7 @@ class FeatureExtractorBase(ABC):
 
     def output_attention(self):
         return False
+
+    def requires_hidden_states(self):
+        """Whether this extractor needs ``output_hidden_states`` from the backbone."""
+        return False

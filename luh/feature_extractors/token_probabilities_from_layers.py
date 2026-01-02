@@ -14,19 +14,22 @@ class FeatureExtractorTokenProbabilitiesFromLayers(FeatureExtractorBase):
         return len(self._layer_nums) * self.top_n
 
     def __call__(self, llm_inputs, llm_outputs):
-        # batch_size x seq_len x layers x hidden_state
-        hidden_states = get_hidden_states(llm_outputs)
+        # batch_size x seq_len x layers x hidden_state (only the requested layers)
+        hidden_states = get_hidden_states(llm_outputs, self._layer_nums)
 
         # For loop on purpose: otherwise receiving CUDA OOM for Llama3/Gemma2. Should be quite fast anyway
         prob_features = []
-        for layer in self._layer_nums:
+        for layer_idx, _ in enumerate(self._layer_nums):
             with torch.no_grad():
-                all_logits = self.lm_head(hidden_states[:, :, layer, :])  # batch_sz x seq_len x vocabulary
+                all_logits = self.lm_head(hidden_states[:, :, layer_idx, :])  # batch_sz x seq_len x vocabulary
             top_probs = torch.sort(all_logits, dim=-1, descending=True)[0][:, :, :self.top_n]
             prob_features.append(top_probs)
         prob_features = torch.cat(prob_features, dim=-1)  # batch_sz x seq_len x (layers * top_n)
 
         return prob_features
+
+    def requires_hidden_states(self):
+        return True
 
 
 def load_extractor(config, base_model, *args, **kwargs):

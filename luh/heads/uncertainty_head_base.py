@@ -26,6 +26,10 @@ class UncertaintyHeadBase(nn.Module):
         self.feature_extractor = feature_extractor
         self.cfg = cfg
         self.model_type = model_type
+        # When training only the uncertainty head we can avoid tracking
+        # gradients through the backbone to reduce memory. This can be
+        # explicitly re-enabled via config if needed.
+        self.backbone_requires_grad = getattr(cfg, "backbone_requires_grad", False)
 
     @abstractmethod
     def _compute_tensors(self, llm_inputs, X, X_attn_mask):
@@ -39,13 +43,23 @@ class UncertaintyHeadBase(nn.Module):
             return llm_outputs["full_attention_mask"][:, 1:]  # all feature_calculators ignore first token
 
     def forward(self, llm_inputs, llm_outputs):
-        features = self.feature_extractor(llm_inputs, llm_outputs)
+        # Avoid building large autograd graphs for backbone features unless
+        # explicitly requested.
+        context = torch.enable_grad() if self.backbone_requires_grad else torch.no_grad()
+        with context:
+            features = self.feature_extractor(llm_inputs, llm_outputs)
+        if not self.backbone_requires_grad and isinstance(features, torch.Tensor):
+            features = features.detach()
         features_attn_mask = self._get_attn_mask(llm_inputs, llm_outputs)
         return self._compute_tensors(llm_inputs, features, features_attn_mask)
 
     @property
     def output_attentions(self):
         return self.feature_extractor.output_attention()
+
+    @property
+    def output_hidden_states(self):
+        return self.feature_extractor.requires_hidden_states()
 
     @classmethod
     def from_pretrained(

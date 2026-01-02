@@ -28,9 +28,12 @@ class FeatureExtractorCombined(FeatureExtractorBase):
 
     def feature_dim(self):
         return sum(fe.feature_dim() for fe in self._feature_extractors)
-    
+
     def output_attention(self):
         return any(fe.output_attention() for fe in self._feature_extractors)
+
+    def requires_hidden_states(self):
+        return any(fe.requires_hidden_states() for fe in self._feature_extractors)
 
 
 def load_extractor(config, base_model):

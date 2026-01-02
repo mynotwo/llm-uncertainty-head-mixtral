@@ -22,6 +22,7 @@ class CausalLMWithUncertaintyLayerClaim(PreTrainedModel):
         self.ue_head = ue_head
         self._output_attention = output_attention
         self._ue_pos_weight = ue_pos_weight
+        self._output_hidden_states = ue_head.output_hidden_states
 
     def generate(self, *args, **kwargs):
         raise NotImplementedError
@@ -42,7 +43,7 @@ class CausalLMWithUncertaintyLayerClaim(PreTrainedModel):
             if return_dict is not None
             else self.orig_base_model.config.use_return_dict
         )
-        output_hidden_states = True
+        output_hidden_states = self._output_hidden_states
         output_attentions = self._output_attention
 
         outputs = self.orig_base_model(

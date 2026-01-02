@@ -14,7 +14,7 @@ class FinalOutputRanks(FeatureExtractorBase):
 
     def rankings(self, llm_inputs, llm_outputs, **kwargs):
         # batch_size x seq_len x layers x hidden_state
-        hidden_states = get_hidden_states(llm_outputs)
+        hidden_states = get_hidden_states(llm_outputs, self._layer_nums)
         if hasattr(llm_outputs, "sequences"):
             token_ids = llm_outputs.sequences
         else:
@@ -25,13 +25,13 @@ class FinalOutputRanks(FeatureExtractorBase):
         )).int().to(token_ids.device)  # batch_size x seq_len x layers
 
         # For loop on purpose: otherwise receiving CUDA OOM for Llama3/Gemma2. Should be quite fast anyway
-        for layer in self._layer_nums:
+        for layer_idx, _ in enumerate(self._layer_nums):
             with torch.no_grad():
-                all_logits = self.lm_head(hidden_states[:, :, layer, :])  # batch_sz x seq_len x vocabulary
+                all_logits = self.lm_head(hidden_states[:, :, layer_idx, :])  # batch_sz x seq_len x vocabulary
             sorted_idx = torch.argsort(all_logits, dim=-1, descending=True)
             expanded_token_ids = token_ids[:, :-1].unsqueeze(-1).expand(*sorted_idx.shape)
             matches = (expanded_token_ids[:, 1:, :] == sorted_idx[:, :-1, :])  # batch_sz x seq_len x vocabulary
-            rankings[:, 1:, layer] = matches.int().argmax(dim=-1) + 1
+            rankings[:, 1:, layer_idx] = matches.int().argmax(dim=-1) + 1
 
         return rankings  # batch_size x sequence_length x feature_vector
 
@@ -40,6 +40,9 @@ class FinalOutputRanks(FeatureExtractorBase):
         return 1 / all_rank  # (0, 1]
         # This is a strange formula from FactoScope paper&github. Probably should not use it, instead just 1/rank.
         # return 1 / ((1 - all_rank) + 1 + 1e-7)
+
+    def requires_hidden_states(self):
+        return True
 
 
 def load_extractor(config, base_model, *args, **kwargs):

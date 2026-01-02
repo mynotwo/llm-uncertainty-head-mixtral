@@ -26,19 +26,37 @@ def get_head_nums(head_nums, layer_nums, orig_base_model):
     return {l: (head_nums,) for l in layer_nums}
 
 
-def get_hidden_states(llm_outputs):
+def get_hidden_states(llm_outputs, layer_nums=None, detach=True):
+    """Return stacked hidden states only for the requested layers.
+
+    Selecting a subset of layers avoids allocating a full
+    ``batch x seq_len x num_layers x hidden`` tensor when only a few
+    layers are needed. Detaching prevents autograd from retaining large
+    computation graphs when backbone gradients are disabled.
+    """
+
     hs = llm_outputs["hidden_states"]
     is_training = type(hs[-1]) == torch.Tensor
+
+    if layer_nums is None:
+        layer_nums = range(len(hs) if is_training else len(hs[0]))
+
     if is_training:
-        return torch.stack([
-            hs[layer][:, :-1, :]
-            for layer in range(len(hs))
-        ], dim=-2)
-    else:
-        return torch.cat([
-            torch.stack([
-                t[layer]
-                for layer in range(len(t))
-            ], dim=-2)
-            for t in hs
-        ], dim=1)
+        stacked_layers = []
+        for layer in layer_nums:
+            layer_state = hs[layer]
+            if detach:
+                layer_state = layer_state.detach()
+            stacked_layers.append(layer_state[:, :-1, :])
+        return torch.stack(stacked_layers, dim=-2)
+
+    per_token_layers = []
+    for token_states in hs:
+        stacked_layers = []
+        for layer in layer_nums:
+            layer_state = token_states[layer]
+            if detach:
+                layer_state = layer_state.detach()
+            stacked_layers.append(layer_state)
+        per_token_layers.append(torch.stack(stacked_layers, dim=-2))
+    return torch.cat(per_token_layers, dim=1)
