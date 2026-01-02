@@ -51,6 +51,7 @@ class CausalLMWithUncertaintyLayerClaim(PreTrainedModel):
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=True,
             return_dict=return_dict,
             **kwargs
         )

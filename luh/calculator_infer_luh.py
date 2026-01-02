@@ -88,6 +88,7 @@ class CalculatorInferLuh(StatCalculator):
                 **combined_batch,
                 output_attentions=self.output_attentions,
                 output_hidden_states=True,
+                output_router_logits=True,
             )
             logits = out.logits.log_softmax(-1) # Why log_softmax?
             
@@ -264,6 +265,7 @@ class CalculatorInferLuh(StatCalculator):
             "output_hidden_states": True,
             "num_return_sequences": 1,
             "do_sample": False,
+            "output_router_logits": True,
         }
         gen_args.update(kwargs)
 

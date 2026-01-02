@@ -36,7 +36,8 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
                 "return_dict_in_generate": True,
                 "output_scores": True,
                 "output_hidden_states": True,
-                "output_attentions": self._output_attention
+                "output_attentions": self._output_attention,
+                "output_router_logits": True,
             }
         )
 
@@ -69,6 +70,7 @@ class CausalLMWithUncertaintyLayer(PreTrainedModel):
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_router_logits=True,
             return_dict=return_dict,
             **kwargs
         )
