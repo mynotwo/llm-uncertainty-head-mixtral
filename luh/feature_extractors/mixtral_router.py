@@ -203,8 +203,27 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
                     "or [batch, n_layers, seq_len, num_experts]."
                 )
 
+            if tensor.dim() == 2:
+                # Shape [tokens, num_experts] with batch and layer flattened.
+                tokens = tensor.shape[0]
+                # First try to split across both batch and layers when possible.
+                if tokens % (batch_size * len(self._layer_indices)) == 0:
+                    seq_len = tokens // (batch_size * len(self._layer_indices))
+                    return tensor.view(batch_size, len(self._layer_indices), seq_len, tensor.shape[1])
+
+                if tokens % batch_size == 0:
+                    # Treat as a single layer where tokens are flattened over batch.
+                    seq_len = tokens // batch_size
+                    return tensor.view(batch_size, 1, seq_len, tensor.shape[1])
+
+                raise ValueError(
+                    "Unable to normalize 2D router tensor with shape "
+                    f"{tuple(tensor.shape)} for batch size {batch_size}. "
+                    "Expected tokens to be divisible by batch (and optionally number of layers)."
+                )
+
             raise ValueError(
-                "Router tensor must be 3D or 4D with expert scores; "
+                "Router tensor must be 2D, 3D, or 4D with expert scores; "
                 f"received shape {tuple(tensor.shape)}"
             )
 
