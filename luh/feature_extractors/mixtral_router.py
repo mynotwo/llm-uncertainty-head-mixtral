@@ -26,6 +26,7 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
         max_seq_len_for_concat_tokens: int | None = None,
         dim_align: str = "direct",
         target_head_dim: int | None = None,
+        num_experts: int | None = None,
         **kwargs,
     ):
         assert feature_source in {"mixtral_router", "dense_hidden"}, (
@@ -54,10 +55,17 @@ class FeatureExtractorMixtralRouter(FeatureExtractorBase):
             use_moe_layers if use_moe_layers is not None else "all", orig_base_model
         )
 
-        # Number of experts is read from the Mixtral config.
-        self._num_experts = getattr(orig_base_model.config, "num_experts", None)
+        # Number of experts is read from the Mixtral config, with an optional override.
+        # Mixtral configs sometimes expose this as ``num_local_experts``.
+        config_num_experts = getattr(orig_base_model.config, "num_experts", None)
+        if config_num_experts is None:
+            config_num_experts = getattr(orig_base_model.config, "num_local_experts", None)
+
+        self._num_experts = num_experts if num_experts is not None else config_num_experts
         if self._num_experts is None:
-            raise ValueError("Mixtral router feature extractor requires num_experts in the model config")
+            raise ValueError(
+                "Mixtral router feature extractor requires num_experts; set it on the model config or pass num_experts to the extractor"
+            )
 
         # Token aggregation determines per-layer feature width.
         if self._token_agg == "mean":
